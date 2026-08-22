@@ -1,76 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
-type Filter = "all" | "brand" | "campaign";
-
-type Project = {
-  id: string;
-  title: string;
-  number: string;
-  year: string;
-  tags: string[];
-  filter: Exclude<Filter, "all">;
-  image: string;
-  imageAlt: string;
-  statement: string;
-  description: string;
-};
-
-const projects: Project[] = [
-  {
-    id: "mamison",
-    title: "Мамисон",
-    number: "03",
-    year: "2024",
-    tags: ["Айдентика", "Среда"],
-    filter: "brand",
-    image: "/case-mamison.jpg",
-    imageAlt: "Айдентика курорта Мамисон в реальной среде",
-    statement: "Место становится системой",
-    description: "Не логотип для места, а система, которая становится его частью — в архитектуре, навигации и реальном опыте человека.",
-  },
-  {
-    id: "kappa",
-    title: "Kappa × Virtus.pro",
-    number: "02",
-    year: "2021",
-    tags: ["Кампания", "Коллаборация"],
-    filter: "campaign",
-    image: "/case-kappa-wide.jpg",
-    imageAlt: "Кампания Kappa и Virtus.pro",
-    statement: "Один мир из трёх культур",
-    description: "Спорт, мода и киберкультура не сложены рядом. Из их столкновения собран один узнаваемый визуальный мир.",
-  },
-  {
-    id: "burger-king",
-    title: "Уже не тот",
-    number: "01",
-    year: "2020",
-    tags: ["Кампания", "Фильм"],
-    filter: "campaign",
-    image: "/case-burger-king.png",
-    imageAlt: "Кадр кампании Burger King «Уже не тот»",
-    statement: "Одна мысль, которую не нужно объяснять",
-    description: "Характер Burger King превращён в короткий кинематографичный образ. Простая мысль удерживает весь фильм.",
-  },
-];
+import { projects, type Filter, type Project } from "./projects";
 
 const practice = [
   { title: "HowToSasha", tags: ["Инструмент", "Web"], number: "04", text: "Восемь инструкций о совместной работе — от мутной задачи до сильного решения." },
   { title: "Обратный бриф", tags: ["Метод"], number: "03", text: "Способ превратить формальный запрос в задачу, по которой можно принимать решения." },
   { title: "Zero Draft", tags: ["Метод", "Креатив"], number: "02", text: "Первый креативный проход: несколько принципиально разных маршрутов вместо полировки одного." },
   { title: "Creative Studio OS", tags: ["Система"], number: "01", text: "Принципы, процессы и критерии качества для инхаус-студии, которая работает как система." },
-];
-
-const gallery = [
-  ["/case-mamison.jpg", "Айдентика Мамисона"],
-  ["/sasha-close.jpg", "Портрет Саши Алхименкова"],
-  ["/case-kappa-wide.jpg", "Kappa × Virtus.pro"],
-  ["/case-burger-king.png", "Burger King — Уже не тот"],
-  ["/sasha-film.jpg", "Саша за работой"],
-  ["/case-kappa-detail.jpg", "Наружная реклама Kappa × Virtus.pro"],
-  ["/sasha-hero.jpg", "Портрет Саши Алхименкова"],
 ];
 
 export default function Home() {
@@ -206,8 +143,12 @@ export default function Home() {
           </>
         ) : (
           <section className="gallery reveal in-view" aria-label="Галерея работ">
-            {gallery.map(([src, alt], index) => (
-              <figure key={`${src}-${index}`}><img src={src} alt={alt} /></figure>
+            {projects.map((project) => (
+              <button className="gallery-card" onClick={() => setSelected(project)} key={project.id} aria-label={`Открыть кейс ${project.title}`}>
+                <figure style={{ background: project.tone }}>
+                  {project.image ? <img src={project.image} alt={project.imageAlt} /> : <span><b>{project.title}</b><small>{project.year} · {project.tags.join(" / ")}</small></span>}
+                </figure>
+              </button>
             ))}
           </section>
         )}
@@ -252,8 +193,8 @@ export default function Home() {
           <article className="modal case-modal">
             <header><span>{selected.number}. Кейс</span><button onClick={() => setSelected(null)} aria-label="Закрыть">×</button></header>
             <div className="case-head"><div><h2>{selected.title}</h2><p>{selected.year}<br />{selected.tags.join(" · ")}</p></div><strong>{selected.statement}</strong></div>
-            <img src={selected.image} alt={selected.imageAlt} />
-            <div className="case-body"><p>{selected.description}</p><p>Здесь важен принцип: форма не прикладывается к идее после. Она и есть способ сделать идею видимой, точной и работающей.</p></div>
+            {selected.image ? <img src={selected.image} alt={selected.imageAlt} /> : <div className="case-cover" style={{ background: selected.tone }}><span>{selected.title}</span><small>{selected.number} / {selected.year}</small></div>}
+            <div className="case-body"><p>{selected.description}</p><p>{selected.source ? <a className="case-link" href={selected.source} target="_blank" rel="noreferrer">{selected.sourceLabel ?? "Открыть источник"} ↗</a> : "Креативная разработка, арт-дирекшн и работа с командой до результата."}</p></div>
           </article>
         </div>
       )}
