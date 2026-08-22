@@ -51,6 +51,20 @@ export default function Home() {
   );
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const saved = window.localStorage.getItem("portfolio-theme");
+      if (saved === "light" || saved === "dark") {
+        setLight(saved === "light");
+        return;
+      }
+      if (window.matchMedia("(max-width: 820px)").matches) {
+        setLight(window.matchMedia("(prefers-color-scheme: light)").matches);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
     let value = 0;
     const timer = window.setInterval(() => {
       value = Math.min(100, value + Math.ceil(Math.random() * 18));
@@ -100,6 +114,14 @@ export default function Home() {
     setGalleryView(false);
   };
 
+  const toggleTheme = () => {
+    setLight((value) => {
+      const next = !value;
+      window.localStorage.setItem("portfolio-theme", next ? "light" : "dark");
+      return next;
+    });
+  };
+
   return (
     <div className={light ? "site light" : "site"}>
       <div className={loading ? "loader" : "loader loader-done"} aria-hidden={!loading}>
@@ -126,7 +148,7 @@ export default function Home() {
           <span aria-hidden="true">{galleryView ? "‹" : "▦"}</span> {galleryView ? "Индекс" : "Галерея"}
         </button>
         <button className="nav-button about-button" onClick={() => setAboutOpen(true)}>Обо мне</button>
-        <button className="theme-button" onClick={() => setLight((value) => !value)} aria-label="Сменить светлую и тёмную тему">◐</button>
+        <button className="theme-button" onClick={toggleTheme} aria-label="Сменить светлую и тёмную тему">◐</button>
       </header>
 
       <main className="wrap" id="top">
@@ -137,7 +159,7 @@ export default function Home() {
             <button onClick={() => changeFilter("campaign")}> кампании</button> и системы. Сейчас руковожу
             <strong> Creative Studio Финтеха Яндекса.</strong>
           </p>
-          <button className="mobile-theme" onClick={() => setLight((value) => !value)} aria-label="Сменить тему">◐</button>
+          <button className="mobile-theme" onClick={toggleTheme} aria-label="Сменить тему">◐</button>
         </section>
 
         {!galleryView ? (
