@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { projects, type Filter, type Project } from "./projects";
 
 const practice = [
@@ -10,10 +10,10 @@ const practice = [
   { title: "Creative Studio OS", tags: ["Система"], number: "01", text: "Принципы, процессы и критерии качества для инхаус-студии, которая работает как система." },
 ];
 
-function ProjectVisual({ project, compact = false }: { project: Project; compact?: boolean }) {
-  const cover = project.media?.[0];
+function ProjectVisual({ project, compact = false, mediaIndex = 0 }: { project: Project; compact?: boolean; mediaIndex?: number }) {
+  const cover = project.media?.[mediaIndex] ?? project.media?.[0];
   if (cover?.type === "image") return <img src={cover.src} alt={cover.alt} />;
-  if (cover?.type === "video") return <video src={cover.src} poster={cover.poster} muted playsInline preload="metadata"><track kind="captions" src="/captions/portfolio.vtt" srcLang="ru" label="Русский" /></video>;
+  if (cover?.type === "video") return <video src={cover.src} poster={cover.poster} muted loop autoPlay playsInline preload="metadata"><track kind="captions" src="/captions/portfolio.vtt" srcLang="ru" label="Русский" /></video>;
   return (
     <span className="generated-cover" style={{ background: project.tone }}>
       <b>{project.title}</b>
@@ -28,9 +28,22 @@ export default function Home() {
   const [light, setLight] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [selected, setSelected] = useState<Project | null>(null);
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [caseClosing, setCaseClosing] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState(0);
   const [practiceOpen, setPracticeOpen] = useState<(typeof practice)[number] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadProgress, setLoadProgress] = useState(0);
+
+  const closeCase = useCallback(() => {
+    if (!selected || caseClosing) return;
+    setCaseClosing(true);
+    window.setTimeout(() => {
+      setSelected(null);
+      setStoryOpen(false);
+      setCaseClosing(false);
+    }, 560);
+  }, [selected, caseClosing]);
 
   const visibleProjects = useMemo(
     () => filter === "all" ? projects : projects.filter((project) => project.filter === filter),
@@ -61,11 +74,26 @@ export default function Home() {
     const modalOpen = aboutOpen || selected || practiceOpen;
     document.body.style.overflow = modalOpen ? "hidden" : "";
     const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { setAboutOpen(false); setSelected(null); setPracticeOpen(null); }
+      if (event.key === "Escape") { setAboutOpen(false); closeCase(); setPracticeOpen(null); }
     };
     window.addEventListener("keydown", close);
     return () => { document.body.style.overflow = ""; window.removeEventListener("keydown", close); };
-  }, [aboutOpen, selected, practiceOpen]);
+  }, [aboutOpen, selected, practiceOpen, closeCase]);
+
+  useEffect(() => {
+    if (!selected || (selected.media?.length ?? 0) < 2) return;
+    const timer = window.setInterval(() => {
+      setPreviewIndex((value) => (value + 1) % (selected.media?.length ?? 1));
+    }, 680);
+    return () => window.clearInterval(timer);
+  }, [selected]);
+
+  const openCase = (project: Project) => {
+    setCaseClosing(false);
+    setStoryOpen(false);
+    setPreviewIndex(0);
+    setSelected(project);
+  };
 
   const changeFilter = (next: Filter) => {
     setFilter(next);
@@ -82,7 +110,7 @@ export default function Home() {
       <div className="rail rail-left" />
       <div className="rail rail-right" />
 
-      <header className="floating-nav" aria-label="Навигация">
+      <header className={galleryView ? "floating-nav gallery-mode" : "floating-nav"} aria-label="Навигация">
         <a className="avatar" href="#top" aria-label="Саша Алхименков — в начало">
           <img src="/sasha-hero.jpg" alt="" />
           <span />
@@ -116,9 +144,9 @@ export default function Home() {
           <>
             <section className="section project-section reveal" aria-labelledby="project-index">
               <h1 id="project-index">Индекс проектов</h1>
-              <div className="project-list">
-                {visibleProjects.map((project) => (
-                  <button className="project-row" onClick={() => setSelected(project)} key={project.id}>
+              <div className="project-list filtered-list" key={filter}>
+                {visibleProjects.map((project, index) => (
+                  <button className="project-row" style={{ animationDelay: `${index * 22}ms` }} onClick={() => openCase(project)} key={project.id}>
                     <span className="project-tags">{project.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</span>
                     <span className="project-title">{project.title}</span>
                     <sup>{project.number}</sup>
@@ -155,8 +183,8 @@ export default function Home() {
           </>
         ) : (
           <section className="gallery reveal in-view" aria-label="Галерея работ">
-            {projects.map((project) => (
-              <button className="gallery-card" onClick={() => setSelected(project)} key={project.id} aria-label={`Открыть кейс ${project.title}`}>
+            {projects.map((project, index) => (
+              <button className="gallery-card" style={{ animationDelay: `${(index % 9) * 45}ms` }} onClick={() => openCase(project)} key={project.id} aria-label={`Открыть кейс ${project.title}`}>
                 <figure style={{ background: project.tone }}>
                   <ProjectVisual project={project} />
                 </figure>
@@ -201,22 +229,27 @@ export default function Home() {
       )}
 
       {selected && (
-        <div className="case-overlay" role="dialog" aria-modal="true" aria-label={`Кейс ${selected.title}`}>
+        <div className={`case-overlay${caseClosing ? " is-closing" : ""}${storyOpen ? " story-open" : ""}`} role="dialog" aria-modal="true" aria-label={`Кейс ${selected.title}`}>
+          <button className="case-backdrop-hit" onClick={closeCase} aria-label="Закрыть превью кейса" />
           <div className="case-layout">
             <aside className="case-preview">
               <div className="case-preview-media" style={{ background: selected.tone }}>
-                <ProjectVisual project={selected} compact />
+                {(selected.media?.length ? selected.media : [null]).map((_, index) => (
+                  <span className={index === previewIndex ? "preview-frame is-current" : "preview-frame"} key={index} aria-hidden={index !== previewIndex}>
+                    <ProjectVisual project={selected} compact mediaIndex={index} />
+                  </span>
+                ))}
               </div>
               <footer>
                 <p>{selected.title}<br /><em>{selected.year}</em></p>
-                <span>Case Study</span>
+                <button onClick={() => setStoryOpen(true)}>Case Study</button>
               </footer>
             </aside>
 
-            <article className="case-story">
+            <article className="case-story" aria-hidden={!storyOpen}>
               <header>
                 <span>{selected.number}.</span>
-                <button onClick={() => setSelected(null)} aria-label="Закрыть кейс">×</button>
+                <button onClick={closeCase} aria-label="Закрыть кейс">×</button>
               </header>
               <section className="case-intro">
                 <div className="case-meta">
