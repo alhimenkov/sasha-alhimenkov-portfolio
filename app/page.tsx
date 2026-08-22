@@ -10,6 +10,18 @@ const practice = [
   { title: "Creative Studio OS", tags: ["Система"], number: "01", text: "Принципы, процессы и критерии качества для инхаус-студии, которая работает как система." },
 ];
 
+function ProjectVisual({ project, compact = false }: { project: Project; compact?: boolean }) {
+  const cover = project.media?.[0];
+  if (cover?.type === "image") return <img src={cover.src} alt={cover.alt} />;
+  if (cover?.type === "video") return <video src={cover.src} poster={cover.poster} muted playsInline preload="metadata"><track kind="captions" src="/captions/portfolio.vtt" srcLang="ru" label="Русский" /></video>;
+  return (
+    <span className="generated-cover" style={{ background: project.tone }}>
+      <b>{project.title}</b>
+      {!compact && <small>{project.year}<br />{project.tags.join(" / ")}</small>}
+    </span>
+  );
+}
+
 export default function Home() {
   const [filter, setFilter] = useState<Filter>("all");
   const [galleryView, setGalleryView] = useState(false);
@@ -146,7 +158,7 @@ export default function Home() {
             {projects.map((project) => (
               <button className="gallery-card" onClick={() => setSelected(project)} key={project.id} aria-label={`Открыть кейс ${project.title}`}>
                 <figure style={{ background: project.tone }}>
-                  {project.image ? <img src={project.image} alt={project.imageAlt} /> : <span><b>{project.title}</b><small>{project.year} · {project.tags.join(" / ")}</small></span>}
+                  <ProjectVisual project={project} />
                 </figure>
               </button>
             ))}
@@ -189,13 +201,46 @@ export default function Home() {
       )}
 
       {selected && (
-        <div className="overlay" role="dialog" aria-modal="true" aria-label={`Кейс ${selected.title}`}>
-          <article className="modal case-modal">
-            <header><span>{selected.number}. Кейс</span><button onClick={() => setSelected(null)} aria-label="Закрыть">×</button></header>
-            <div className="case-head"><div><h2>{selected.title}</h2><p>{selected.year}<br />{selected.tags.join(" · ")}</p></div><strong>{selected.statement}</strong></div>
-            {selected.image ? <img src={selected.image} alt={selected.imageAlt} /> : <div className="case-cover" style={{ background: selected.tone }}><span>{selected.title}</span><small>{selected.number} / {selected.year}</small></div>}
-            <div className="case-body"><p>{selected.description}</p><p>{selected.source ? <a className="case-link" href={selected.source} target="_blank" rel="noreferrer">{selected.sourceLabel ?? "Открыть источник"} ↗</a> : "Креативная разработка, арт-дирекшн и работа с командой до результата."}</p></div>
-          </article>
+        <div className="case-overlay" role="dialog" aria-modal="true" aria-label={`Кейс ${selected.title}`}>
+          <div className="case-layout">
+            <aside className="case-preview">
+              <div className="case-preview-media" style={{ background: selected.tone }}>
+                <ProjectVisual project={selected} compact />
+              </div>
+              <footer>
+                <p>{selected.title}<br /><em>{selected.year}</em></p>
+                <span>Case Study</span>
+              </footer>
+            </aside>
+
+            <article className="case-story">
+              <header>
+                <span>{selected.number}.</span>
+                <button onClick={() => setSelected(null)} aria-label="Закрыть кейс">×</button>
+              </header>
+              <section className="case-intro">
+                <div className="case-meta">
+                  <h2>{selected.title}</h2>
+                  <p><em>{selected.year}</em><br />Role: {selected.role}</p>
+                  <div className="case-tags">{selected.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
+                </div>
+                <div className="case-copy">
+                  <p className="case-lede">{selected.lede}</p>
+                  {selected.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+                  {selected.works && <p className="case-work-list"><span>Selected work</span>{selected.works.join(" · ")}</p>}
+                </div>
+              </section>
+              <section className="case-media" aria-label={`Материалы ${selected.title}`}>
+                {(selected.media?.length ? selected.media : [{ type: "cover" as const }]).map((media, index) => (
+                  <figure key={"src" in media ? media.src : `${selected.id}-${index}`} style={{ background: selected.tone }}>
+                    {media.type === "image" && <img src={media.src} alt={media.alt} />}
+                    {media.type === "video" && <video src={media.src} poster={media.poster} controls playsInline preload="metadata" aria-label={media.alt}><track kind="captions" src="/captions/portfolio.vtt" srcLang="ru" label="Русский" /></video>}
+                    {media.type === "cover" && <span className="generated-cover"><b>{selected.title}</b><small>{selected.lede}</small></span>}
+                  </figure>
+                ))}
+              </section>
+            </article>
+          </div>
         </div>
       )}
 
