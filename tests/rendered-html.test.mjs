@@ -48,3 +48,23 @@ test("keeps case studies local and aligned to the split-panel reference", async 
     await access(new URL(`../public${asset}`, import.meta.url));
   }
 });
+
+test("includes the portfolio-specific studio instruments", async () => {
+  const [page, instruments, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/studio-instruments.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /Студийный звук/);
+  assert.match(page, /Europe\/Moscow/);
+  assert.match(page, /role="slider"/);
+  assert.match(page, /portfolio-case-split/);
+  assert.match(instruments, /AudioContext/);
+  assert.match(instruments, /weatherKind/);
+  assert.match(css, /\.weather-orb/);
+  assert.match(css, /\.case-split-handle/);
+  assert.match(css, /aspect-ratio:\s*3\s*\/\s*2/);
+  assert.match(css, /object-fit:\s*cover/);
+  assert.match(css, /@keyframes sound-meter/);
+});

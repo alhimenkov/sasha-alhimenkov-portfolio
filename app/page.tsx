@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { projects, type Filter, type Project } from "./projects";
+import { playStudioCue, weatherKind, weatherLabels, type WeatherKind } from "./studio-instruments";
 
 const practice = [
   { title: "HowToSasha", tags: ["Инструмент", "Web"], number: "04", text: "Восемь инструкций о совместной работе — от мутной задачи до сильного решения." },
@@ -27,13 +28,26 @@ export default function Home() {
   const [galleryView, setGalleryView] = useState(false);
   const [light, setLight] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [aboutClosing, setAboutClosing] = useState(false);
   const [selected, setSelected] = useState<Project | null>(null);
   const [storyOpen, setStoryOpen] = useState(false);
   const [caseClosing, setCaseClosing] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [practiceOpen, setPracticeOpen] = useState<(typeof practice)[number] | null>(null);
+  const [practiceClosing, setPracticeClosing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [filterPill, setFilterPill] = useState({ x: 6, width: 0 });
+  const [projectHover, setProjectHover] = useState<{ id: string; y: number; height: number } | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [moscowTime, setMoscowTime] = useState("");
+  const [weather, setWeather] = useState<{ kind: WeatherKind; temperature: number | null; isDay: boolean }>({ kind: "clear", temperature: null, isDay: true });
+  const [caseSplit, setCaseSplit] = useState(50);
+  const [splitDragging, setSplitDragging] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const soundRef = useRef(false);
+  const splitDraggingRef = useRef(false);
+  const caseSplitRef = useRef(50);
 
   const closeCase = useCallback(() => {
     if (!selected || caseClosing) return;
@@ -50,6 +64,41 @@ export default function Home() {
     [filter],
   );
 
+  const anyModalOpen = Boolean(aboutOpen || selected || practiceOpen);
+
+  const openAbout = () => {
+    setAboutClosing(false);
+    setAboutOpen(true);
+  };
+
+  const closeAbout = useCallback(() => {
+    if (!aboutOpen || aboutClosing) return;
+    setAboutClosing(true);
+    window.setTimeout(() => {
+      setAboutOpen(false);
+      setAboutClosing(false);
+    }, 560);
+  }, [aboutOpen, aboutClosing]);
+
+  const openPractice = (item: (typeof practice)[number]) => {
+    setPracticeClosing(false);
+    setPracticeOpen(item);
+  };
+
+  const closePractice = useCallback(() => {
+    if (!practiceOpen || practiceClosing) return;
+    setPracticeClosing(true);
+    window.setTimeout(() => {
+      setPracticeOpen(null);
+      setPracticeClosing(false);
+    }, 560);
+  }, [practiceOpen, practiceClosing]);
+
+  const closeStory = useCallback(() => {
+    if (window.matchMedia("(max-width: 820px)").matches) closeCase();
+    else setStoryOpen(false);
+  }, [closeCase]);
+
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       const saved = window.localStorage.getItem("portfolio-theme");
@@ -62,6 +111,57 @@ export default function Home() {
       }
     });
     return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const savedSound = window.localStorage.getItem("portfolio-sound");
+      const enabled = !reducedMotion && savedSound === "on";
+      setSoundEnabled(enabled);
+      soundRef.current = enabled;
+      const savedSplit = Number.parseFloat(window.localStorage.getItem("portfolio-case-split") ?? "");
+      if (Number.isFinite(savedSplit) && savedSplit >= 32 && savedSplit <= 68) {
+        caseSplitRef.current = savedSplit;
+        setCaseSplit(savedSplit);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const updateClock = () => setMoscowTime(new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Europe/Moscow", weekday: "short", hour: "2-digit", minute: "2-digit",
+    }).format(new Date()).replace(",", " ·"));
+    updateClock();
+    const clock = window.setInterval(updateClock, 30_000);
+    const controller = new AbortController();
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=55.7558&longitude=37.6173&current=temperature_2m,weather_code,is_day&timezone=Europe%2FMoscow", { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!data?.current) return;
+        setWeather({
+          kind: weatherKind(Number(data.current.weather_code)),
+          temperature: Math.round(Number(data.current.temperature_2m)),
+          isDay: Boolean(data.current.is_day),
+        });
+      })
+      .catch(() => undefined);
+    return () => { window.clearInterval(clock); controller.abort(); };
+  }, []);
+
+  useEffect(() => {
+    const hover = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      const target = event.target instanceof Element ? event.target.closest("button, a") : null;
+      if (target && !target.contains(event.relatedTarget as Node | null)) playStudioCue("hover", soundRef.current);
+    };
+    const press = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest("button, a")) playStudioCue("press", soundRef.current);
+    };
+    document.addEventListener("pointerover", hover);
+    document.addEventListener("pointerdown", press);
+    return () => { document.removeEventListener("pointerover", hover); document.removeEventListener("pointerdown", press); };
   }, []);
 
   useEffect(() => {
@@ -85,14 +185,32 @@ export default function Home() {
   }, [galleryView]);
 
   useEffect(() => {
-    const modalOpen = aboutOpen || selected || practiceOpen;
-    document.body.style.overflow = modalOpen ? "hidden" : "";
+    document.body.style.overflow = anyModalOpen ? "hidden" : "";
     const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { setAboutOpen(false); closeCase(); setPracticeOpen(null); }
+      if (event.key !== "Escape") return;
+      if (aboutOpen) closeAbout();
+      else if (practiceOpen) closePractice();
+      else if (selected && storyOpen) closeStory();
+      else closeCase();
     };
     window.addEventListener("keydown", close);
     return () => { document.body.style.overflow = ""; window.removeEventListener("keydown", close); };
-  }, [aboutOpen, selected, practiceOpen, closeCase]);
+  }, [aboutOpen, practiceOpen, selected, storyOpen, anyModalOpen, closeAbout, closePractice, closeStory, closeCase]);
+
+  useEffect(() => {
+    const update = () => {
+      const root = filterRef.current;
+      const active = root?.querySelector<HTMLButtonElement>('button[aria-selected="true"]');
+      if (active) setFilterPill({ x: active.offsetLeft, width: active.offsetWidth });
+    };
+    const frame = window.requestAnimationFrame(update);
+    document.fonts?.ready.then(update);
+    window.addEventListener("resize", update);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", update);
+    };
+  }, [filter, galleryView]);
 
   useEffect(() => {
     if (!selected || (selected.media?.length ?? 0) < 2) return;
@@ -107,6 +225,7 @@ export default function Home() {
     setStoryOpen(false);
     setPreviewIndex(0);
     setSelected(project);
+    playStudioCue("open", soundRef.current);
   };
 
   const changeFilter = (next: Filter) => {
@@ -122,8 +241,62 @@ export default function Home() {
     });
   };
 
+  const toggleSound = () => {
+    setSoundEnabled((current) => {
+      const next = !current;
+      soundRef.current = next;
+      window.localStorage.setItem("portfolio-sound", next ? "on" : "off");
+      if (next) playStudioCue("ready", true);
+      return next;
+    });
+  };
+
+  const updateCaseSplit = (clientX: number) => {
+    const next = Math.max(32, Math.min(68, (clientX / window.innerWidth) * 100));
+    caseSplitRef.current = next;
+    setCaseSplit(next);
+  };
+
+  const startSplitResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    splitDraggingRef.current = true;
+    setSplitDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.style.userSelect = "none";
+    updateCaseSplit(event.clientX);
+  };
+
+  const moveSplitResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!splitDraggingRef.current) return;
+    updateCaseSplit(event.clientX);
+  };
+
+  const endSplitResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!splitDraggingRef.current) return;
+    splitDraggingRef.current = false;
+    setSplitDragging(false);
+    document.body.style.userSelect = "";
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* capture may already be released */ }
+    window.localStorage.setItem("portfolio-case-split", caseSplitRef.current.toFixed(1));
+    playStudioCue("ready", soundRef.current);
+  };
+
+  const keySplitResize = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const step = event.shiftKey ? 5 : 2;
+    let next = caseSplit;
+    if (event.key === "ArrowLeft") next -= step;
+    else if (event.key === "ArrowRight") next += step;
+    else if (event.key === "Home") next = 50;
+    else return;
+    event.preventDefault();
+    next = Math.max(32, Math.min(68, next));
+    caseSplitRef.current = next;
+    setCaseSplit(next);
+    window.localStorage.setItem("portfolio-case-split", next.toFixed(1));
+    playStudioCue("press", soundRef.current);
+  };
+
   return (
-    <div className={light ? "site light" : "site"}>
+    <div className={`${light ? "site light" : "site"}${anyModalOpen ? " has-modal" : ""}`}>
       <div className={loading ? "loader" : "loader loader-done"} aria-hidden={!loading}>
         <span>/{loadProgress}</span>
       </div>
@@ -138,7 +311,8 @@ export default function Home() {
           <span />
         </a>
         {!galleryView && (
-          <div className="filters" role="tablist" aria-label="Фильтр проектов">
+          <div className="filters" ref={filterRef} role="tablist" aria-label="Фильтр проектов">
+            <span className="filter-pill" style={{ width: filterPill.width, transform: `translateX(${filterPill.x}px)` }} aria-hidden="true" />
             {([['all', 'Все'], ['brand', 'Бренд'], ['campaign', 'Кампании']] as const).map(([value, label]) => (
               <button className={filter === value ? "is-active" : ""} key={value} onClick={() => changeFilter(value)} role="tab" aria-selected={filter === value}>{label}</button>
             ))}
@@ -147,14 +321,14 @@ export default function Home() {
         <button className="nav-button view-button" onClick={() => setGalleryView((value) => !value)}>
           <span aria-hidden="true">{galleryView ? "‹" : "▦"}</span> {galleryView ? "Индекс" : "Галерея"}
         </button>
-        <button className="nav-button about-button" onClick={() => setAboutOpen(true)}>Обо мне</button>
+        <button className="nav-button about-button" onClick={openAbout}>Обо мне</button>
         <button className="theme-button" onClick={toggleTheme} aria-label="Сменить светлую и тёмную тему">◐</button>
       </header>
 
       <main className="wrap" id="top">
         <section className="hero reveal">
           <p>
-            <button onClick={() => setAboutOpen(true)}>Саша Алхименков</button> — креативный директор.
+            <button onClick={openAbout}>Саша Алхименков</button> — креативный директор.
             Превращаю сложные продукты в <button onClick={() => changeFilter("brand")}>ясные бренды</button>,
             <button onClick={() => changeFilter("campaign")}> кампании</button> и системы. Сейчас руковожу
             <strong> Creative Studio Финтеха Яндекса.</strong>
@@ -166,9 +340,27 @@ export default function Home() {
           <>
             <section className="section project-section reveal" aria-labelledby="project-index">
               <h1 id="project-index">Индекс проектов</h1>
-              <div className="project-list filtered-list" key={filter}>
+              <div className="project-list filtered-list" onMouseLeave={() => setProjectHover(null)}>
+                <span
+                  className={`project-hover-bar${projectHover ? " is-visible" : ""}`}
+                  style={{ height: projectHover?.height ?? 0, transform: `translateY(${projectHover?.y ?? 0}px)` }}
+                  aria-hidden="true"
+                />
+                <span
+                  className={`project-hover-cap${projectHover ? " is-visible" : ""}`}
+                  style={{ height: projectHover?.height ?? 0, transform: `translateY(${projectHover?.y ?? 0}px)` }}
+                  aria-hidden="true"
+                >↗</span>
                 {visibleProjects.map((project, index) => (
-                  <button className="project-row" style={{ animationDelay: `${index * 22}ms` }} onClick={() => openCase(project)} key={project.id}>
+                  <button
+                    className={`project-row${projectHover?.id === project.id ? " is-active" : ""}`}
+                    style={{ animationDelay: `${index * 22}ms` }}
+                    onMouseEnter={(event) => setProjectHover({ id: project.id, y: event.currentTarget.offsetTop - 2, height: event.currentTarget.offsetHeight + 4 })}
+                    onFocus={(event) => setProjectHover({ id: project.id, y: event.currentTarget.offsetTop - 2, height: event.currentTarget.offsetHeight + 4 })}
+                    onBlur={() => setProjectHover(null)}
+                    onClick={() => openCase(project)}
+                    key={project.id}
+                  >
                     <span className="project-tags">{project.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</span>
                     <span className="project-title">{project.title}</span>
                     <sup>{project.number}</sup>
@@ -185,7 +377,7 @@ export default function Home() {
               </div>
               <div className="project-list practice-list">
                 {practice.map((item) => (
-                  <button className="project-row" onClick={() => setPracticeOpen(item)} key={item.number}>
+                  <button className="project-row" onClick={() => openPractice(item)} key={item.number}>
                     <span className="project-tags">{item.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</span>
                     <span className="project-title">{item.title}</span>
                     <sup>{item.number}</sup>
@@ -199,8 +391,8 @@ export default function Home() {
                 <h2 id="notes-title">архив/мыслей</h2>
                 <p>Как я смотрю на креатив, команды и решения.</p>
               </div>
-              <button className="note-row" onClick={() => setPracticeOpen(practice[1])}>Смысл перед формой <sup>02</sup></button>
-              <button className="note-row" onClick={() => setPracticeOpen(practice[2])}>Не варианты, а маршруты <sup>01</sup></button>
+              <button className="note-row" onClick={() => openPractice(practice[1])}>Смысл перед формой <sup>02</sup></button>
+              <button className="note-row" onClick={() => openPractice(practice[2])}>Не варианты, а маршруты <sup>01</sup></button>
             </section>
           </>
         ) : (
@@ -219,7 +411,17 @@ export default function Home() {
       <footer className="footer">
         <hr />
         <p>Новые работы появляются регулярно. Заходите ещё.</p>
-        <time aria-label="Локальное время">Москва · GMT+3</time>
+        <div className="studio-instruments" aria-label="Студийный контекст">
+          <div className={`weather-status weather-${weather.kind}${weather.isDay ? " is-day" : " is-night"}`} title={`Москва · ${weatherLabels[weather.kind]}${weather.temperature === null ? "" : ` · ${weather.temperature}°`} `}>
+            <span className="weather-orb" aria-hidden="true"><span /></span>
+            <span><b>Москва</b><time>{moscowTime || "GMT+3"}</time></span>
+            <em>{weather.temperature === null ? weatherLabels[weather.kind] : `${weather.temperature}° · ${weatherLabels[weather.kind]}`}</em>
+          </div>
+          <button className="sound-toggle" onClick={toggleSound} aria-pressed={soundEnabled} aria-label={`${soundEnabled ? "Выключить" : "Включить"} звуковую обратную связь`}>
+            <span className="sound-wave" aria-hidden="true"><i /><i /><i /></span>
+            <span>Студийный звук <b>{soundEnabled ? "вкл" : "выкл"}</b></span>
+          </button>
+        </div>
         <nav aria-label="Контакты">
           <a href="mailto:alhimenkov@yandex-team.ru">Email ↗</a>
           <a href="https://t.me/tgimondays" target="_blank" rel="noreferrer">Telegram ↗</a>
@@ -228,9 +430,9 @@ export default function Home() {
       </footer>
 
       {aboutOpen && (
-        <div className="overlay" role="dialog" aria-modal="true" aria-label="Обо мне">
+        <div className={`overlay${aboutClosing ? " overlay-closing" : ""}`} role="dialog" aria-modal="true" aria-label="Обо мне">
           <article className="modal bio-modal">
-            <header><span>Обо мне</span><button onClick={() => setAboutOpen(false)} aria-label="Закрыть">×</button></header>
+            <header><span>Обо мне</span><button onClick={closeAbout} aria-label="Закрыть">×</button></header>
             <div className="bio-grid">
               <aside>
                 <strong>Саша Алхименков</strong>
@@ -253,7 +455,7 @@ export default function Home() {
       {selected && (
         <div className={`case-overlay${caseClosing ? " is-closing" : ""}${storyOpen ? " story-open" : ""}`} role="dialog" aria-modal="true" aria-label={`Кейс ${selected.title}`}>
           <button className="case-backdrop-hit" onClick={closeCase} aria-label="Закрыть превью кейса" />
-          <div className="case-layout">
+          <div className="case-layout" data-resizing={splitDragging} style={{ gridTemplateColumns: `${caseSplit}% ${100 - caseSplit}%` }}>
             <aside className="case-preview">
               <div className="case-preview-media" style={{ background: selected.tone }}>
                 {(selected.media?.length ? selected.media : [null]).map((_, index) => (
@@ -268,10 +470,30 @@ export default function Home() {
               </footer>
             </aside>
 
+            <button
+              className="case-split-handle"
+              style={{ left: `${caseSplit}%` }}
+              role="slider"
+              aria-label="Изменить соотношение превью и текста"
+              aria-orientation="horizontal"
+              aria-valuemin={32}
+              aria-valuemax={68}
+              aria-valuenow={Math.round(caseSplit)}
+              aria-valuetext={`${Math.round(caseSplit)} процентов превью, ${Math.round(100 - caseSplit)} процентов текста`}
+              onPointerDown={startSplitResize}
+              onPointerMove={moveSplitResize}
+              onPointerUp={endSplitResize}
+              onPointerCancel={endSplitResize}
+              onKeyDown={keySplitResize}
+            >
+              <span aria-hidden="true"><i /><i /><i /></span>
+              <em>{Math.round(caseSplit)} / {Math.round(100 - caseSplit)}</em>
+            </button>
+
             <article className="case-story" aria-hidden={!storyOpen}>
               <header>
                 <span>{selected.number}.</span>
-                <button onClick={closeCase} aria-label="Закрыть кейс">×</button>
+                <button onClick={closeStory} aria-label="Закрыть case study">×</button>
               </header>
               <section className="case-intro">
                 <div className="case-meta">
@@ -300,9 +522,9 @@ export default function Home() {
       )}
 
       {practiceOpen && (
-        <div className="overlay compact-overlay" role="dialog" aria-modal="true" aria-label={practiceOpen.title}>
+        <div className={`overlay compact-overlay${practiceClosing ? " overlay-closing" : ""}`} role="dialog" aria-modal="true" aria-label={practiceOpen.title}>
           <article className="modal compact-modal">
-            <header><span>{practiceOpen.number}. Практика</span><button onClick={() => setPracticeOpen(null)} aria-label="Закрыть">×</button></header>
+            <header><span>{practiceOpen.number}. Практика</span><button onClick={closePractice} aria-label="Закрыть">×</button></header>
             <div><h2>{practiceOpen.title}</h2><p>{practiceOpen.text}</p></div>
           </article>
         </div>
