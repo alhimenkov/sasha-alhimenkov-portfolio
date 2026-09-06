@@ -20,7 +20,7 @@ test("server-renders the complete brand index", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Саша Алхименков — креативный директор<\/title>/i);
-  for (const brand of ["Яндекс Сплит", "DAR", "Мамисон", "MR Group", "John Dory", "QNB", "Отелло", "adidas", "START", "Yota", "2ГИС", "Рассвет"]) {
+  for (const brand of ["Яндекс Сплит", "DAR", "Мамисон", "МЫС", "John Dory", "QNB", "Отелло", "adidas", "START", "Yota", "2ГИС", "Рассвет"]) {
     assert.match(html, new RegExp(brand));
   }
   assert.doesNotMatch(html, /Fit&amp;Go|Второй шанс/);
@@ -41,6 +41,20 @@ test("keeps case studies local and aligned to the split-panel reference", async 
   assert.match(css, /grid-template-columns:\s*1fr 1fr/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.doesNotMatch(projects, /https?:\/\//);
+  assert.match(page, /disabled=\{!hasCase\}/);
+  assert.match(page, /3400/);
+  assert.match(page, /prefers-reduced-motion: reduce/);
+  for (const localCase of [
+    "/cases/start/film.mp4",
+    "/cases/demix/motivation.mp4",
+    "/cases/demix/manifesto.mp4",
+    "/cases/yota/oneheart-loop.mp4",
+    "/cases/familia/film-01.mp4",
+    "/cases/familia/film-02.mp4",
+    "/cases/familia/film-03.mp4",
+  ]) {
+    assert.match(projects, new RegExp(localCase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 
   const assets = [...projects.matchAll(/["'](\/[^"']+\.(?:jpg|png|mp4))["']/g)].map((match) => match[1]);
   assert.ok(assets.length >= 10);

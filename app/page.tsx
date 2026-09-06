@@ -4,16 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { projects, type Filter, type Project, type ProjectMedia } from "./projects";
 import { playStudioCue, weatherKind, weatherLabels, type WeatherKind } from "./studio-instruments";
 
-const practice = [
-  { title: "HowToSasha", tags: ["Инструмент", "Web"], number: "04", text: "Восемь инструкций о совместной работе — от мутной задачи до сильного решения." },
-  { title: "Обратный бриф", tags: ["Метод"], number: "03", text: "Способ превратить формальный запрос в задачу, по которой можно принимать решения." },
-  { title: "Zero Draft", tags: ["Метод", "Креатив"], number: "02", text: "Первый креативный проход: несколько принципиально разных маршрутов вместо полировки одного." },
-  { title: "Creative Studio OS", tags: ["Система"], number: "01", text: "Принципы, процессы и критерии качества для инхаус-студии, которая работает как система." },
-];
-
 function ProjectVisual({ project, compact = false, mediaIndex = 0 }: { project: Project; compact?: boolean; mediaIndex?: number }) {
   const cover = project.media?.[mediaIndex] ?? project.media?.[0];
-  if (cover?.type === "image") return <img src={cover.src} alt={cover.alt} />;
+  if (cover?.type === "image") return <img src={cover.src} alt={cover.alt} loading={compact ? "eager" : "lazy"} decoding="async" />;
   if (cover?.type === "video") return <video src={cover.src} poster={cover.poster} muted loop autoPlay playsInline preload="metadata"><track kind="captions" src="/captions/portfolio.vtt" srcLang="ru" label="Русский" /></video>;
   return (
     <span className="generated-cover" style={{ background: project.tone }}>
@@ -27,7 +20,7 @@ function CaseMediaFigure({ media, tone }: { media: ProjectMedia; tone: string })
   const looping = media.type === "video" && media.playback === "loop";
   return (
     <figure style={{ background: tone }}>
-      {media.type === "image" && <img src={media.src} alt={media.alt} />}
+      {media.type === "image" && <img src={media.src} alt={media.alt} loading="lazy" decoding="async" />}
       {media.type === "video" && (
         <video
           src={media.src}
@@ -58,10 +51,7 @@ export default function Home() {
   const [storyOpen, setStoryOpen] = useState(false);
   const [caseClosing, setCaseClosing] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
-  const [practiceOpen, setPracticeOpen] = useState<(typeof practice)[number] | null>(null);
-  const [practiceClosing, setPracticeClosing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadProgress, setLoadProgress] = useState(0);
+  const [previewPaused, setPreviewPaused] = useState(false);
   const [filterPill, setFilterPill] = useState({ x: 6, width: 0 });
   const [projectHover, setProjectHover] = useState<{ id: string; y: number; height: number } | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
@@ -89,7 +79,7 @@ export default function Home() {
     [filter],
   );
 
-  const anyModalOpen = Boolean(aboutOpen || selected || practiceOpen);
+  const anyModalOpen = Boolean(aboutOpen || selected);
 
   const openAbout = () => {
     setAboutClosing(false);
@@ -104,20 +94,6 @@ export default function Home() {
       setAboutClosing(false);
     }, 560);
   }, [aboutOpen, aboutClosing]);
-
-  const openPractice = (item: (typeof practice)[number]) => {
-    setPracticeClosing(false);
-    setPracticeOpen(item);
-  };
-
-  const closePractice = useCallback(() => {
-    if (!practiceOpen || practiceClosing) return;
-    setPracticeClosing(true);
-    window.setTimeout(() => {
-      setPracticeOpen(null);
-      setPracticeClosing(false);
-    }, 560);
-  }, [practiceOpen, practiceClosing]);
 
   const closeStory = useCallback(() => {
     if (window.matchMedia("(max-width: 820px)").matches) closeCase();
@@ -190,17 +166,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    let value = 0;
-    const timer = window.setInterval(() => {
-      value = Math.min(100, value + Math.ceil(Math.random() * 18));
-      setLoadProgress(value);
-      if (value === 100) window.clearInterval(timer);
-    }, 55);
-    const done = window.setTimeout(() => setLoading(false), 850);
-    return () => { window.clearInterval(timer); window.clearTimeout(done); };
-  }, []);
-
-  useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add("in-view")),
       { threshold: 0.08 },
@@ -214,13 +179,12 @@ export default function Home() {
     const close = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (aboutOpen) closeAbout();
-      else if (practiceOpen) closePractice();
       else if (selected && storyOpen) closeStory();
       else closeCase();
     };
     window.addEventListener("keydown", close);
     return () => { document.body.style.overflow = ""; window.removeEventListener("keydown", close); };
-  }, [aboutOpen, practiceOpen, selected, storyOpen, anyModalOpen, closeAbout, closePractice, closeStory, closeCase]);
+  }, [aboutOpen, selected, storyOpen, anyModalOpen, closeAbout, closeStory, closeCase]);
 
   useEffect(() => {
     const update = () => {
@@ -238,17 +202,19 @@ export default function Home() {
   }, [filter, galleryView]);
 
   useEffect(() => {
-    if (!selected || (selected.media?.length ?? 0) < 2) return;
+    if (!selected || storyOpen || previewPaused || (selected.media?.length ?? 0) < 2) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(() => {
       setPreviewIndex((value) => (value + 1) % (selected.media?.length ?? 1));
-    }, 680);
+    }, 3400);
     return () => window.clearInterval(timer);
-  }, [selected]);
+  }, [selected, storyOpen, previewPaused]);
 
   const openCase = (project: Project) => {
     setCaseClosing(false);
     setStoryOpen(false);
     setPreviewIndex(0);
+    setPreviewPaused(false);
     setSelected(project);
     playStudioCue("open", soundRef.current);
   };
@@ -322,10 +288,6 @@ export default function Home() {
 
   return (
     <div className={`${light ? "site light" : "site"}${anyModalOpen ? " has-modal" : ""}`}>
-      <div className={loading ? "loader" : "loader loader-done"} aria-hidden={!loading}>
-        <span>/{loadProgress}</span>
-      </div>
-
       <div className="page-field" />
       <div className="rail rail-left" />
       <div className="rail rail-right" />
@@ -354,8 +316,8 @@ export default function Home() {
         <section className="hero reveal">
           <p>
             <button onClick={openAbout}>Саша Алхименков</button> — креативный директор.
-            Превращаю сложные продукты в <button onClick={() => changeFilter("brand")}>ясные бренды</button>,
-            <button onClick={() => changeFilter("campaign")}> кампании</button> и системы. Сейчас руковожу
+            Превращаю сложные продукты в <button onClick={() => changeFilter("brand")}>ясные бренды</button>,{" "}
+            <button onClick={() => changeFilter("campaign")}>кампании</button> и системы. Сейчас руковожу
             <strong> Creative Studio Финтеха Яндекса.</strong>
           </p>
           <button className="mobile-theme" onClick={toggleTheme} aria-label="Сменить тему">◐</button>
@@ -376,53 +338,34 @@ export default function Home() {
                   style={{ height: projectHover?.height ?? 0, transform: `translateY(${projectHover?.y ?? 0}px)` }}
                   aria-hidden="true"
                 >↗</span>
-                {visibleProjects.map((project, index) => (
+                {visibleProjects.map((project, index) => {
+                  const hasCase = Boolean(project.media?.length);
+                  return (
                   <button
-                    className={`project-row${projectHover?.id === project.id ? " is-active" : ""}`}
+                    className={`project-row${projectHover?.id === project.id ? " is-active" : ""}${hasCase ? "" : " is-archive"}`}
                     style={{ animationDelay: `${index * 22}ms` }}
-                    onMouseEnter={(event) => setProjectHover({ id: project.id, y: event.currentTarget.offsetTop - 2, height: event.currentTarget.offsetHeight + 4 })}
-                    onFocus={(event) => setProjectHover({ id: project.id, y: event.currentTarget.offsetTop - 2, height: event.currentTarget.offsetHeight + 4 })}
+                    onMouseEnter={hasCase ? (event) => setProjectHover({ id: project.id, y: event.currentTarget.offsetTop - 2, height: event.currentTarget.offsetHeight + 4 }) : undefined}
+                    onFocus={hasCase ? (event) => setProjectHover({ id: project.id, y: event.currentTarget.offsetTop - 2, height: event.currentTarget.offsetHeight + 4 }) : undefined}
                     onBlur={() => setProjectHover(null)}
-                    onClick={() => openCase(project)}
+                    onClick={hasCase ? () => openCase(project) : undefined}
+                    disabled={!hasCase}
+                    title={hasCase ? undefined : "Кейс готовится"}
                     key={project.id}
                   >
                     <span className="project-tags">{project.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</span>
                     <span className="project-title">{project.title}</span>
                     <sup>{project.number}</sup>
                   </button>
-                ))}
+                  );
+                })}
               </div>
               {filter !== "all" && <button className="show-all" onClick={() => setFilter("all")}>Показать все</button>}
             </section>
 
-            <section className="section practice-section reveal" aria-labelledby="practice-title">
-              <div className="section-copy">
-                <h2 id="practice-title">ПРАКТИКА</h2>
-                <p>Инструменты, методы и рабочие системы для креативной разработки.</p>
-              </div>
-              <div className="project-list practice-list">
-                {practice.map((item) => (
-                  <button className="project-row" onClick={() => openPractice(item)} key={item.number}>
-                    <span className="project-tags">{item.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</span>
-                    <span className="project-title">{item.title}</span>
-                    <sup>{item.number}</sup>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className="section notes-section reveal" aria-labelledby="notes-title">
-              <div className="section-copy">
-                <h2 id="notes-title">архив/мыслей</h2>
-                <p>Как я смотрю на креатив, команды и решения.</p>
-              </div>
-              <button className="note-row" onClick={() => openPractice(practice[1])}>Смысл перед формой <sup>02</sup></button>
-              <button className="note-row" onClick={() => openPractice(practice[2])}>Не варианты, а маршруты <sup>01</sup></button>
-            </section>
           </>
         ) : (
           <section className="gallery reveal in-view" aria-label="Галерея работ">
-            {projects.map((project, index) => (
+            {projects.filter((project) => project.media?.length).map((project, index) => (
               <button className="gallery-card" style={{ animationDelay: `${(index % 9) * 45}ms` }} onClick={() => openCase(project)} key={project.id} aria-label={`Открыть кейс ${project.title}`}>
                 <figure style={{ background: project.tone }}>
                   <ProjectVisual project={project} />
@@ -448,7 +391,7 @@ export default function Home() {
           </button>
         </div>
         <nav aria-label="Контакты">
-          <a href="mailto:alhimenkov@yandex-team.ru">Email ↗</a>
+          <a href="mailto:aalhimenkov@gmail.com">Email ↗</a>
           <a href="https://t.me/tgimondays" target="_blank" rel="noreferrer">Telegram ↗</a>
         </nav>
         <div className="signature">Саша Алхименков</div>
@@ -461,7 +404,7 @@ export default function Home() {
             <div className="bio-grid">
               <aside>
                 <strong>Саша Алхименков</strong>
-                <a href="mailto:alhimenkov@yandex-team.ru">alhimenkov@yandex-team.ru ↗</a>
+                <a href="mailto:aalhimenkov@gmail.com">aalhimenkov@gmail.com ↗</a>
                 <a href="https://t.me/tgimondays" target="_blank" rel="noreferrer">Telegram ↗</a>
               </aside>
               <div className="bio-content">
@@ -482,7 +425,12 @@ export default function Home() {
           <button className="case-backdrop-hit" onClick={closeCase} aria-label="Закрыть превью кейса" />
           <div className="case-layout" data-resizing={splitDragging} style={{ gridTemplateColumns: `${caseSplit}% ${100 - caseSplit}%` }}>
             <aside className="case-preview">
-              <div className="case-preview-media" style={{ background: selected.tone }}>
+              <div
+                className="case-preview-media"
+                style={{ background: selected.tone }}
+                onMouseEnter={() => setPreviewPaused(true)}
+                onMouseLeave={() => setPreviewPaused(false)}
+              >
                 {(selected.media?.length ? selected.media : [null]).map((_, index) => (
                   <span className={index === previewIndex ? "preview-frame is-current" : "preview-frame"} key={index} aria-hidden={index !== previewIndex}>
                     <ProjectVisual project={selected} compact mediaIndex={index} />
@@ -561,14 +509,6 @@ export default function Home() {
         </div>
       )}
 
-      {practiceOpen && (
-        <div className={`overlay compact-overlay${practiceClosing ? " overlay-closing" : ""}`} role="dialog" aria-modal="true" aria-label={practiceOpen.title}>
-          <article className="modal compact-modal">
-            <header><span>{practiceOpen.number}. Практика</span><button onClick={closePractice} aria-label="Закрыть">×</button></header>
-            <div><h2>{practiceOpen.title}</h2><p>{practiceOpen.text}</p></div>
-          </article>
-        </div>
-      )}
     </div>
   );
 }
