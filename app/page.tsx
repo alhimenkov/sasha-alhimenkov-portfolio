@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { projects, type Filter, type Project } from "./projects";
+import { projects, type Filter, type Project, type ProjectMedia } from "./projects";
 import { playStudioCue, weatherKind, weatherLabels, type WeatherKind } from "./studio-instruments";
 
 const practice = [
@@ -20,6 +20,31 @@ function ProjectVisual({ project, compact = false, mediaIndex = 0 }: { project: 
       <b>{project.title}</b>
       {!compact && <small>{project.year}<br />{project.tags.join(" / ")}</small>}
     </span>
+  );
+}
+
+function CaseMediaFigure({ media, tone }: { media: ProjectMedia; tone: string }) {
+  const looping = media.type === "video" && media.playback === "loop";
+  return (
+    <figure style={{ background: tone }}>
+      {media.type === "image" && <img src={media.src} alt={media.alt} />}
+      {media.type === "video" && (
+        <video
+          src={media.src}
+          poster={media.poster}
+          controls={!looping}
+          muted={looping}
+          loop={looping}
+          autoPlay={looping}
+          playsInline
+          preload="metadata"
+          aria-label={media.alt}
+        >
+          <track kind="captions" src="/captions/portfolio.vtt" srcLang="ru" label="Русский" />
+        </video>
+      )}
+      {media.caption && <figcaption>{media.caption}</figcaption>}
+    </figure>
   );
 }
 
@@ -507,15 +532,30 @@ export default function Home() {
                   {selected.works && <p className="case-work-list"><span>Selected work</span>{selected.works.join(" · ")}</p>}
                 </div>
               </section>
-              <section className="case-media" aria-label={`Материалы ${selected.title}`}>
-                {(selected.media?.length ? selected.media : [{ type: "cover" as const }]).map((media, index) => (
-                  <figure key={"src" in media ? media.src : `${selected.id}-${index}`} style={{ background: selected.tone }}>
-                    {media.type === "image" && <img src={media.src} alt={media.alt} />}
-                    {media.type === "video" && <video src={media.src} poster={media.poster} controls playsInline preload="metadata" aria-label={media.alt}><track kind="captions" src="/captions/portfolio.vtt" srcLang="ru" label="Русский" /></video>}
-                    {media.type === "cover" && <span className="generated-cover"><b>{selected.title}</b><small>{selected.lede}</small></span>}
-                  </figure>
-                ))}
-              </section>
+              {selected.sections?.length ? (
+                <div className="case-chapters">
+                  {selected.sections.map((section, sectionIndex) => (
+                    <section className="case-chapter" key={`${selected.id}-${section.title}`}>
+                      <div className="case-chapter-copy">
+                        <p className="case-chapter-index">{section.eyebrow ?? String(sectionIndex + 1).padStart(2, "0")}</p>
+                        <h3>{section.title}</h3>
+                        <div>{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
+                      </div>
+                      {section.media?.length && (
+                        <div className={`case-media case-media-${section.layout ?? "single"}`} aria-label={`${section.title}: материалы`}>
+                          {section.media.map((media) => <CaseMediaFigure key={media.src} media={media} tone={selected.tone} />)}
+                        </div>
+                      )}
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <section className="case-media" aria-label={`Материалы ${selected.title}`}>
+                  {selected.media?.length ? selected.media.map((media) => <CaseMediaFigure key={media.src} media={media} tone={selected.tone} />) : (
+                    <figure style={{ background: selected.tone }}><span className="generated-cover"><b>{selected.title}</b><small>{selected.lede}</small></span></figure>
+                  )}
+                </section>
+              )}
             </article>
           </div>
         </div>
