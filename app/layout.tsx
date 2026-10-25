@@ -1,11 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Newsreader } from "next/font/google";
+import { Geist_Mono, Newsreader } from "next/font/google";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin", "cyrillic"],
-});
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -18,8 +13,10 @@ const newsreader = Newsreader({
   display: "swap",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://sasha-portfolio-index.palissander.chatgpt.site"),
+  metadataBase: new URL(siteUrl),
   title: "Саша Алхименков — креативный директор",
   description: "Портфолио Саши Алхименкова: бренды, кампании, творческие системы и способ работы.",
   icons: {
@@ -49,7 +46,7 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} antialiased`}
+        className={`${geistMono.variable} ${newsreader.variable} antialiased`}
       >
         {children}
       </body>
